@@ -16,6 +16,16 @@ public partial class OptionSettingWindow : WindowBase<OptionSettingViewModel>
         btnCancel.Click += (s, e) => this.Close();
         _config = AppHandler.Instance.Config;
 
+        btnBrowseExternalTesterPath.Click += async (s, e) =>
+        {
+            var dialog = new OpenFileDialog();
+            var result = await dialog.ShowAsync(this);
+            if (result != null && result.Length > 0)
+            {
+                ViewModel.ExternalTesterPath = result[0];
+            }
+        };
+
         ViewModel = new OptionSettingViewModel(UpdateViewHandler);
 
         clbdestOverride.SelectionChanged += ClbdestOverride_SelectionChanged;
@@ -100,6 +110,7 @@ public partial class OptionSettingWindow : WindowBase<OptionSettingViewModel>
             this.Bind(ViewModel, vm => vm.SrsFileSourceUrl, v => v.cmbSrsFilesSourceUrl.SelectedValue).DisposeWith(disposables);
             this.Bind(ViewModel, vm => vm.RoutingRulesSourceUrl, v => v.cmbRoutingRulesSourceUrl.SelectedValue).DisposeWith(disposables);
             this.Bind(ViewModel, vm => vm.IPAPIUrl, v => v.cmbIPAPIUrl.SelectedValue).DisposeWith(disposables);
+            this.Bind(ViewModel, vm => vm.ExternalTesterPath, v => v.txtExternalTesterPath.Text).DisposeWith(disposables);
 
             this.Bind(ViewModel, vm => vm.notProxyLocalAddress, v => v.tognotProxyLocalAddress.IsChecked).DisposeWith(disposables);
             this.Bind(ViewModel, vm => vm.systemProxyAdvancedProtocol, v => v.cmbsystemProxyAdvancedProtocol.SelectedValue).DisposeWith(disposables);

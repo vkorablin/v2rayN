@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 
@@ -294,8 +295,82 @@ public class SpeedtestService
         await Task.WhenAll(tasks);
     }
 
+    private async Task<(bool success, string message)> RunExternalTesterAsync(string? testerPath, string proxyUrl)
+    {
+        if (string.IsNullOrEmpty(testerPath) || !File.Exists(testerPath))
+        {
+            return (true, string.Empty);
+        }
+
+        try
+        {
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = testerPath,
+                    Arguments = proxyUrl,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            };
+
+            process.Start();
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+
+            if (!process.WaitForExit(15000))
+            {
+                try
+                {
+                    process.Kill();
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+                return (false, "External tester timed out.");
+            }
+
+            string output = await outputTask;
+            string error = await errorTask;
+
+            if (process.ExitCode == 0)
+            {
+                return (true, output.Trim());
+            }
+            else
+            {
+                return (false, $"External tester failed with exit code {process.ExitCode}: {output.Trim()} {error.Trim()}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+            return (false, $"External tester failed: {ex.Message}");
+        }
+    }
     private async Task<int> DoRealPing(DownloadService downloadHandle, ServerTestItem it)
     {
+        if (!string.IsNullOrEmpty(_config.SpeedTestItem.ExternalTesterPath))
+        {
+            var proxyUrl = $"http://{Global.Loopback}:{it.Port}";
+            var (success, message) = await RunExternalTesterAsync(_config.SpeedTestItem.ExternalTesterPath, proxyUrl);
+            if (!success)
+            {
+                ProfileExHandler.Instance.SetTestDelay(it.IndexId, -1);
+                UpdateFunc(it.IndexId, message);
+                return -1;
+            }
+            if (!string.IsNullOrEmpty(message))
+            {
+                Logging.SaveLog(_tag, $"External tester for {it.Address}:{it.Port} output: {message}");
+            }
+        }
+
         var webProxy = new WebProxy($"socks5://{Global.Loopback}:{it.Port}");
         var responseTime = await downloadHandle.GetRealPingTime(_config.SpeedTestItem.SpeedPingTestUrl, webProxy, 10);
 
